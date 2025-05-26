@@ -8,7 +8,8 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'colegioB.settings.dev')
 django.setup()
 
 from apps.usuarios.models import User, Rol
-
+from django.utils.crypto import get_random_string
+from django.db import transaction
 
 def crear_roles():
     rol_docente, _ = Rol.objects.get_or_create(nombre='docente')
@@ -17,13 +18,15 @@ def crear_roles():
     return rol_docente, rol_estudiante, rol_tutor
 
 
+@transaction.atomic
 def crear_usuarios():
     rol_docente, rol_estudiante, rol_tutor = crear_roles()
 
+    # Crear tutor si no existe
+    tutor_ci = 2345678
     tutor, created = User.objects.get_or_create(
-        username='tutor1',
-        defaults={
-            'ci': '2345678',  # campo ci obligatorio
+        ci=tutor_ci,
+        defaults={ 
             'email': 'tutor1@colegio.com',
             'nombre': 'Laura Martínez',
             'rol': rol_tutor,
@@ -31,16 +34,20 @@ def crear_usuarios():
         }
     )
     if created:
-        tutor.set_password('tutor123')
+        tutor.set_password(str(tutor_ci))  # contraseña = ci
         tutor.save()
-        print("Tutor creado")
+        tutor.username = f"tutor_{tutor.id}"
+        tutor.save()
+        print("Tutor creado:", tutor.username)
     else:
-        print("Tutor ya existía")
+        print("Tutor ya existía:", tutor.username)
 
+    # Crear docente
+    docente_ci = 12345676
     docente, created = User.objects.get_or_create(
-        username='docente1',
+        ci=docente_ci,
         defaults={
-            'ci': '12345676',  # campo ci obligatorio
+            'username': 'docente1',
             'email': 'docente1@colegio.com',
             'nombre': 'Juan Pérez',
             'rol': rol_docente,
@@ -48,16 +55,21 @@ def crear_usuarios():
         }
     )
     if created:
-        docente.set_password('docente123')
+        docente.set_password(str(docente_ci))
         docente.save()
-        print("Docente creado")
+        print("Docente creado:", docente.username)
     else:
-        print("Docente ya existía")
+        print("Docente ya existía:", docente.username)
+
+    # Crear estudiante con username tipo EST_ABC123
+    estudiante_ci = 12345678
+    username_codigo = get_random_string(length=6).upper()
+    estudiante_username = f"EST_{username_codigo}"
 
     estudiante, created = User.objects.get_or_create(
-        username='estudiante1',
+        ci=estudiante_ci,
         defaults={
-            'ci': '12345678', 
+            'username': estudiante_username,
             'email': 'estudiante1@colegio.com',
             'nombre': 'Ana Gómez',
             'rol': rol_estudiante,
@@ -66,12 +78,11 @@ def crear_usuarios():
         }
     )
     if created:
-        estudiante.set_password('estudiante123')
+        estudiante.set_password(str(estudiante_ci))
         estudiante.save()
-        print("Estudiante creado con tutor asignado")
+        print("Estudiante creado:", estudiante.username, "→ Tutor:", tutor.username)
     else:
-        print("Estudiante ya existía")
-
+        print("Estudiante ya existía:", estudiante.username)
 
 if __name__ == '__main__':
     crear_usuarios()

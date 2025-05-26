@@ -12,8 +12,11 @@ class User(AbstractUser):
     ci = models.PositiveIntegerField("CI", unique=True, null=False, blank=False)
     nombre = models.CharField("Nombre completo", max_length=100, null=True, blank=True)
     celular = models.CharField("Celular", max_length=20, null=True, blank=True)
+
+    # Relación con el rol (estudiante, tutor, docente, etc.)
     rol = models.ForeignKey('Rol', on_delete=models.SET_NULL, null=True, blank=True, related_name='usuarios')
 
+    # Relación autorreferencial: un estudiante tiene un tutor (que también es User)
     tutor = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,
@@ -21,6 +24,9 @@ class User(AbstractUser):
         blank=True,
         related_name='estudiantes'
     )
+
+    # Recomendación: asegurar que el email también sea único
+    email = models.EmailField(unique=True, null=False)
 
     def __str__(self):
         return self.nombre or self.username

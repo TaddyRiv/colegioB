@@ -8,5 +8,5 @@ def test_view(request):
 urlpatterns = [
     path('', test_view),
     path('admin/', admin.site.urls),
-    path('api/auth/', include('apps.usuarios.urls')),  # 👈 Aquí lo conectás
+    path('api/usuarios/', include('apps.usuarios.urls')),  # 👈 esta línea es clave
 ]
