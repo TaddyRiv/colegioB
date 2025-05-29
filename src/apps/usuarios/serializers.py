@@ -8,10 +8,15 @@ class EstudianteRegisterSerializer(serializers.ModelSerializer):
     crear_tutor = serializers.BooleanField(write_only=True, default=False)
     nombre_tutor = serializers.CharField(write_only=True, required=False)
     celular_tutor = serializers.CharField(write_only=True, required=False)
+    email_tutor = serializers.EmailField(write_only=True, required=False)  # Nuevo campo
 
     class Meta:
         model = User
-        fields = ['nombre', 'ci', 'email', 'celular', 'tutor_ci', 'crear_tutor', 'nombre_tutor', 'celular_tutor']
+        fields = [
+            'nombre', 'ci', 'email', 'celular',
+            'tutor_ci', 'crear_tutor',
+            'nombre_tutor', 'celular_tutor', 'email_tutor'  # Incluir aquí
+        ]
 
     def create(self, validated_data):
         rol_estudiante = Rol.objects.get(nombre='estudiante')
@@ -31,12 +36,16 @@ class EstudianteRegisterSerializer(serializers.ModelSerializer):
             ci_tutor = validated_data['tutor_ci']
             nombre_tutor = validated_data.get('nombre_tutor', f'Tutor de {nombre}')
             celular_tutor = validated_data.get('celular_tutor', '')
+            email_tutor = validated_data.get('email_tutor')
+
+            if not email_tutor:
+                raise serializers.ValidationError("Debe proporcionar el email del tutor.")
 
             tutor = User.objects.create(
                 ci=ci_tutor,
                 nombre=nombre_tutor,
                 celular=celular_tutor,
-                email=f"tutor{ci_tutor}@example.com",
+                email=email_tutor,
                 rol=rol_tutor,
             )
             tutor.set_password(str(ci_tutor))
@@ -80,7 +89,6 @@ class EstudianteRegisterSerializer(serializers.ModelSerializer):
         estudiante.set_password(str(ci))
         estudiante.save()
 
-        # Guardamos la respuesta para devolverla en la vista
         self.estudiante_info = {
             "mensaje": "Estudiante registrado exitosamente.",
             "estudiante": {
@@ -94,6 +102,7 @@ class EstudianteRegisterSerializer(serializers.ModelSerializer):
         }
 
         return estudiante
+
 
 class DocenteRegisterSerializer(serializers.ModelSerializer):
     class Meta:
