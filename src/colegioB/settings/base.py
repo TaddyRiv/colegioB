@@ -1,31 +1,15 @@
 from pathlib import Path
 import os
 from datetime import timedelta
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],  # Puedes dejarlo vacío si no usás templates
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-SECRET_KEY = 'django-insecure-una-clave-fake-por-ahora'
-
+SECRET_KEY = 'cambiar-en-dev-o-prod'
 DEBUG = False
-
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = []
 
 INSTALLED_APPS = [
-    'apps.usuarios',
+    'apps.usuarios',  # app personalizada
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -34,8 +18,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
-
-    
 ]
 
 MIDDLEWARE = [
@@ -48,8 +30,23 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'src.colegioB.urls'
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
 
+ROOT_URLCONF = 'src.colegioB.urls'
 WSGI_APPLICATION = 'src.colegioB.wsgi.application'
 
 DATABASES = {
@@ -65,13 +62,9 @@ DATABASES = {
 
 LANGUAGE_CODE = 'es-es'
 TIME_ZONE = 'America/La_Paz'
-
 STATIC_URL = '/static/'
 
-AUTH_USER_MODEL = 'usuarios.User' # nombre de usuario personalizado
-
-
-from datetime import timedelta
+AUTH_USER_MODEL = 'usuarios.User'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

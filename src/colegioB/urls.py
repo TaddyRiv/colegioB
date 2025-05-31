@@ -1,12 +1,7 @@
-from django.http import JsonResponse
-from django.urls import path,include
 from django.contrib import admin
-
-def test_view(request):
-    return JsonResponse({"message": "El backend Django está funcionando correctamente 🎉"})
+from django.urls import path, include
 
 urlpatterns = [
-    path('', test_view),
     path('admin/', admin.site.urls),
-    path('api/usuarios/', include('apps.usuarios.urls')),  # 👈 esta línea es clave
+    path('api/usuarios/', include('apps.usuarios.api.urls')),  # 👈 Aquí debes apuntar a donde están tus views reales
 ]

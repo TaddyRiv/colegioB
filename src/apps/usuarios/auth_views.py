@@ -8,8 +8,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from .models import Inscripcion, User, Curso, Gestion
 from .serializers import InscripcionSerializer
-
 from .serializers import DocenteRegisterSerializer
+from .serializers import TutorSerializer
 
 class DocenteRegisterView(generics.CreateAPIView):
     serializer_class = DocenteRegisterSerializer
@@ -76,3 +76,15 @@ class GestionListView(generics.ListAPIView):
     queryset = Gestion.objects.all()
     serializer_class = GestionSerializer
     permission_classes = [AllowAny]
+    
+class TutorListByCIView(APIView):
+    def get(self, request):
+        ci = request.query_params.get('ci')
+
+        if ci:
+            tutores = User.objects.filter(rol__nombre='tutor', ci=ci)
+        else:
+            tutores = User.objects.filter(rol__nombre='tutor')
+
+        serializer = TutorSerializer(tutores, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

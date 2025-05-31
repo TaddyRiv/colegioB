@@ -3,6 +3,7 @@ from .models import User, Rol
 from django.utils.crypto import get_random_string
 from .models import Inscripcion,Curso, Gestion
 
+
 class EstudianteRegisterSerializer(serializers.ModelSerializer):
     tutor_ci = serializers.IntegerField(write_only=True, required=False)
     crear_tutor = serializers.BooleanField(write_only=True, default=False)
@@ -177,3 +178,7 @@ class GestionSerializer(serializers.ModelSerializer):
         model = Gestion
         fields = ['id', 'nombre', 'estado']
 
+class TutorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'nombre', 'ci', 'email', 'celular']
