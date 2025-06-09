@@ -34,6 +34,7 @@ class User(AbstractUser):
 class Curso(models.Model):
     nombre = models.CharField(max_length=100)
     nivel = models.CharField(max_length=100, null=True, blank=True)
+    materias = models.ManyToManyField('Materia', related_name='cursos')  # <--- Añadido
 
     def __str__(self):
         return self.nombre
@@ -85,11 +86,13 @@ class Inscripcion(models.Model):
 
 class Evaluacion(models.Model):
     nombre = models.CharField(max_length=100)
-    tipo = models.CharField(max_length=50)  # Ej: "Tarea", "Examen"
+    tipo = models.CharField(max_length=50)
     fecha = models.DateField(null=True, blank=True)
     valor = models.FloatField()
     asignacion = models.ForeignKey(Asignacion, on_delete=models.CASCADE, related_name='evaluaciones')
     periodo = models.ForeignKey(Periodo, on_delete=models.CASCADE, related_name='evaluaciones')
+    
+    cerrado = models.BooleanField(default=False)  # 👈 nuevo campo
 
     def __str__(self):
         return f"{self.nombre} - {self.asignacion.materia.nombre} - {self.periodo.nombre}"

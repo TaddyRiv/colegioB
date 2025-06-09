@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import User, Rol
 from django.utils.crypto import get_random_string
 from .models import Inscripcion,Curso, Gestion
-
+from apps.usuarios.models import Nota, Evaluacion, Inscripcion, User
 
 class EstudianteRegisterSerializer(serializers.ModelSerializer):
     tutor_ci = serializers.IntegerField(write_only=True, required=False)
@@ -144,7 +144,12 @@ class DocenteRegisterSerializer(serializers.ModelSerializer):
 
         return docente
 
-    
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'nombre', 'email', 'ci', 'rol']
+
+
 class InscripcionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Inscripcion
@@ -160,9 +165,18 @@ class InscripcionSerializer(serializers.ModelSerializer):
         return data
     
     
+from rest_framework import serializers
+from .models import Materia
+
+class MateriaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Materia
+        fields = ['id', 'nombre']  # Puedes incluir más campos si lo necesitas
     
-    
-    ################# pruebas###########
+
+#######################################       
+       
+       
 class EstudianteSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -182,3 +196,75 @@ class TutorSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'nombre', 'ci', 'email', 'celular']
+        
+
+
+class NotaEstudianteSerializer(serializers.Serializer):
+    estudiante_id = serializers.IntegerField()
+    nota = serializers.FloatField(min_value=0, max_value=100)  # <-- Agrega max_value=100
+
+
+class RegistrarNotasSerializer(serializers.Serializer):
+    evaluacion_id = serializers.IntegerField()
+    notas = NotaEstudianteSerializer(many=True)
+
+    def validate(self, data):
+        try:
+            evaluacion = Evaluacion.objects.get(id=data['evaluacion_id'])
+            if evaluacion.cerrado:
+                raise serializers.ValidationError("Esta evaluación ya está cerrada y no permite subir más notas.")
+        except Evaluacion.DoesNotExist:
+            raise serializers.ValidationError("Evaluación no encontrada.")
+        return data
+
+    def create(self, validated_data):
+        try:
+            evaluacion = Evaluacion.objects.get(id=validated_data['evaluacion_id'])
+            if evaluacion.cerrado:
+                raise serializers.ValidationError("Esta evaluación ya está cerrada y no se pueden subir más notas.")
+        except Evaluacion.DoesNotExist:
+            raise serializers.ValidationError("Evaluación no encontrada.")
+
+        gestion = evaluacion.asignacion.gestion
+        curso = evaluacion.asignacion.curso
+
+        resultados = []
+        errores = False
+
+        for nota_data in validated_data['notas']:
+            estudiante_id = nota_data['estudiante_id']
+            nota_valor = nota_data['nota']
+
+            try:
+                estudiante = User.objects.get(id=estudiante_id)
+                inscripcion = Inscripcion.objects.get(
+                    estudiante=estudiante,
+                    curso=curso,
+                    gestion=gestion
+                )
+
+                nota_obj, created = Nota.objects.update_or_create(
+                    inscripcion=inscripcion,
+                    evaluacion=evaluacion,
+                    defaults={"nota": nota_valor}
+                )
+
+                resultados.append({
+                    "estudiante": estudiante.nombre,
+                    "nota": nota_valor,
+                    "estado": "creado" if created else "actualizado"
+                })
+
+            except (User.DoesNotExist, Inscripcion.DoesNotExist):
+                errores = True
+                resultados.append({
+                    "estudiante_id": estudiante_id,
+                    "error": "No se encontró inscripción válida"
+                })
+
+        # ✅ Solo cerramos la evaluación si NO hubo errores
+        if not errores:
+            evaluacion.cerrado = True
+            evaluacion.save()
+
+        return resultados
