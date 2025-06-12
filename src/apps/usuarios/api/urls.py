@@ -23,7 +23,11 @@ from apps.usuarios.auth_views import (
     CerrarEvaluacionView,
     VerNotasMateriaView,
     MateriasEstudianteView,
-    
+    PrediccionEstudianteView,
+    ResumenDocenteView,
+    EstudiantesPorTutorView,
+    NotasPorEstudianteView,
+    EvaluacionesDocenteView,
 )
 
 urlpatterns = [
@@ -52,4 +56,10 @@ urlpatterns = [
     path('evaluaciones/<int:evaluacion_id>/cerrar/', CerrarEvaluacionView.as_view(), name='cerrar-evaluacion'),
     path('estudiante/materia/<int:materia_id>/notas/', VerNotasMateriaView.as_view(), name='ver-notas-materia'),
     path('estudiante/materias/', MateriasEstudianteView.as_view(), name='materias-estudiante'),
+    path('estudiante/predicciones/', PrediccionEstudianteView.as_view(), name='prediccion-estudiante'),
+    path('docente/resumen/', ResumenDocenteView.as_view(), name='resumen-docente'),
+    path('tutor/estudiantes/', EstudiantesPorTutorView.as_view(), name='tutor-estudiantes'),
+    path('tutor/estudiante/<int:estudiante_id>/notas/', NotasPorEstudianteView.as_view(), name='tutor-notas-estudiante'),
+    path('docente/evaluaciones/', EvaluacionesDocenteView.as_view(), name='evaluaciones-docente'),
 ]
+

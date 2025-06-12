@@ -16,10 +16,19 @@ from apps.usuarios.serializers import UserSerializer
 from rest_framework.permissions import IsAuthenticated
 from apps.usuarios.models import Materia, Evaluacion, Nota, Asignacion
 from django.db import IntegrityError
-from rest_framework import serializers
 from apps.usuarios.serializers import MateriaSerializer
 from apps.usuarios.models import Periodo
 from apps.usuarios.serializers import RegistrarNotasSerializer
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.db import connection
+import pandas as pd
+from apps.usuarios.services.predictor import predecir_nota_final
+from apps.usuarios.serializers import EstudianteSimpleSerializer
+from apps.usuarios.serializers import MateriaConNotasSerializer
+
 
 
 class DocenteRegisterView(generics.CreateAPIView):
@@ -71,9 +80,11 @@ class LoginView(APIView):
                 "nombre": user.nombre,
             }
 
-            # Añadir el ID del estudiante si aplica
+            # Añadir identificadores según el rol
             if rol_nombre == "estudiante":
                 response_data["estudiante"] = { "id": user.id }
+            elif rol_nombre == "tutor":
+                response_data["tutor"] = { "id": user.id }
 
             return Response(response_data)
 
@@ -615,6 +626,7 @@ class MateriasEstudianteView(APIView):
         estudiante = request.user
 
         materias_info = []
+        materias_vistas = set()  
 
         inscripciones = Inscripcion.objects.filter(estudiante=estudiante)
 
@@ -625,10 +637,231 @@ class MateriasEstudianteView(APIView):
             ).select_related('materia')
 
             for asignacion in asignaciones:
-                materias_info.append({
-                    "id": asignacion.materia.id,              # 👈 ahora será `id` en vez de `materia_id`
-                    "nombre": asignacion.materia.nombre,      # 👈 y `nombre` en vez de `materia`
-                    "curso": inscripcion.curso.nombre,
-                    "gestion": inscripcion.gestion.nombre
-                })
+                clave = (asignacion.materia.id, inscripcion.curso.id, inscripcion.gestion.id)
+                if clave not in materias_vistas:
+                    materias_vistas.add(clave)
+                    materias_info.append({
+                        "id": asignacion.materia.id,
+                        "materia_nombre": asignacion.materia.nombre,
+                        "curso": inscripcion.curso.nombre,
+                        "gestion": inscripcion.gestion.nombre
+                    })
+
         return Response({ "materias": materias_info })
+
+    
+    
+    
+class PrediccionEstudianteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        estudiante_id = request.user.id
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+    u.id AS estudiante_id,
+    u.nombre AS estudiante_nombre,
+    c.nombre AS curso,
+    g.nombre AS gestion,
+    m.nombre AS materia,
+
+    COUNT(DISTINCT e.id) AS total_evaluaciones,
+
+    COUNT(CASE WHEN n.nota > 0 THEN n.id ELSE NULL END) AS evaluaciones_registradas,
+
+    AVG(CASE WHEN n.nota > 0 THEN n.nota ELSE NULL END) AS promedio_actual,
+
+    CASE 
+        WHEN COUNT(CASE WHEN n.nota > 0 THEN n.id ELSE NULL END) = COUNT(DISTINCT e.id)
+        THEN AVG(CASE WHEN n.nota > 0 THEN n.nota ELSE NULL END)
+        ELSE NULL
+    END AS nota_final,
+
+    CASE 
+        WHEN COUNT(CASE WHEN n.nota > 0 THEN n.id ELSE NULL END) = COUNT(DISTINCT e.id)
+        THEN TRUE
+        ELSE FALSE
+    END AS completo
+
+FROM usuarios_nota n
+JOIN usuarios_evaluacion e ON n.evaluacion_id = e.id
+JOIN usuarios_asignacion a ON e.asignacion_id = a.id
+JOIN usuarios_materia m ON a.materia_id = m.id
+JOIN usuarios_gestion g ON a.gestion_id = g.id
+JOIN usuarios_inscripcion i ON n.inscripcion_id = i.id
+JOIN usuarios_user u ON i.estudiante_id = u.id
+JOIN usuarios_curso c ON i.curso_id = c.id
+
+WHERE
+    i.gestion_id = a.gestion_id AND
+    u.id = %s
+
+GROUP BY
+    u.id, u.nombre, c.nombre, g.nombre, m.nombre
+
+ORDER BY
+    g.nombre, c.nombre, m.nombre, u.nombre;
+
+            """, [estudiante_id])
+            rows = cursor.fetchall()
+
+        columns = [
+            "estudiante_id", "estudiante_nombre", "curso", "gestion", "materia",
+            "total_evaluaciones", "evaluaciones_registradas", "promedio_actual",
+            "nota_final", "completo"
+        ]
+        df = pd.DataFrame(rows, columns=columns)
+
+        incompletos = df[df["completo"] == False].copy()
+        if not incompletos.empty:
+            df_predichos = predecir_nota_final(incompletos)
+            df.update(df_predichos[["nota_predicha", "estado_predicho"]])
+        else:
+            df["nota_predicha"] = df["nota_final"]
+            df["estado_predicho"] = df["nota_final"].apply(lambda x: "Aprobado" if x >= 51 else "Reprobado")
+
+        return Response(df.to_dict(orient="records"))
+
+
+class ResumenDocenteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        docente_id = request.user.id
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    m.nombre AS materia,
+                    c.nombre AS curso,
+                    g.nombre AS gestion,
+                    AVG(n.nota) AS promedio_general,
+                    COUNT(DISTINCT u.id) AS total_estudiantes
+
+                FROM usuarios_nota n
+                JOIN usuarios_evaluacion e ON n.evaluacion_id = e.id
+                JOIN usuarios_asignacion a ON e.asignacion_id = a.id
+                JOIN usuarios_materia m ON a.materia_id = m.id
+                JOIN usuarios_gestion g ON a.gestion_id = g.id
+                JOIN usuarios_inscripcion i ON n.inscripcion_id = i.id
+                JOIN usuarios_user u ON i.estudiante_id = u.id
+                JOIN usuarios_curso c ON i.curso_id = c.id
+
+                WHERE a.docente_id = %s
+
+                GROUP BY m.nombre, c.nombre, g.nombre
+                ORDER BY g.nombre, c.nombre, m.nombre;
+            """, [docente_id])
+            rows = cursor.fetchall()
+
+        columns = [
+            "materia",
+            "curso",
+            "gestion",
+            "promedio_general",
+            "total_estudiantes"
+        ]
+        df = pd.DataFrame(rows, columns=columns)
+
+        return Response(df.to_dict(orient="records"))
+    
+    
+class EstudiantesPorTutorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.rol or request.user.rol.nombre.lower() != "tutor":
+            return Response({"error": "Acceso denegado: solo tutores pueden acceder."}, status=403)
+
+        estudiantes = User.objects.filter(tutor=request.user)
+        serializer = EstudianteSimpleSerializer(estudiantes, many=True)
+        return Response(serializer.data)
+    
+    
+class NotasPorEstudianteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, estudiante_id):
+        tutor = request.user
+
+        try:
+            estudiante = User.objects.get(id=estudiante_id, tutor=tutor)
+        except User.DoesNotExist:
+            return Response({"error": "Estudiante no encontrado o no pertenece al tutor"}, status=404)
+
+        inscripciones = Inscripcion.objects.filter(estudiante=estudiante)
+        resultados = []
+
+        for inscripcion in inscripciones:
+            notas = Nota.objects.filter(inscripcion=inscripcion).select_related(
+                'evaluacion__asignacion__materia',
+                'evaluacion__asignacion__curso',
+                'evaluacion__asignacion__gestion'
+            ).order_by(
+                'evaluacion__asignacion__materia__nombre',
+                'evaluacion__fecha'
+            )
+
+            # Agrupamos por materia
+            materias_dict = {}
+
+            for nota in notas:
+                materia = nota.evaluacion.asignacion.materia
+                curso = nota.evaluacion.asignacion.curso
+                gestion = nota.evaluacion.asignacion.gestion
+
+                key = (materia.id, curso.id, gestion.id)
+                if key not in materias_dict:
+                    materias_dict[key] = {
+                        "materia": materia.nombre,
+                        "curso": curso.nombre,
+                        "gestion": gestion.nombre,
+                        "evaluaciones": []
+                    }
+
+                materias_dict[key]["evaluaciones"].append({
+                    "evaluacion": nota.evaluacion.nombre,
+                    "tipo": nota.evaluacion.tipo,
+                    "valor": nota.evaluacion.valor,
+                    "nota": nota.nota
+                })
+
+            resultados.extend(materias_dict.values())
+
+        return Response(resultados)
+    
+
+class EvaluacionesDocenteView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+
+        if not user.rol or user.rol.nombre.lower() != 'docente':
+            return Response({"error": "Acceso restringido a docentes"}, status=403)
+
+        asignaciones = Asignacion.objects.filter(docente=user).select_related('materia', 'curso', 'gestion')
+        resultado = []
+
+        for asignacion in asignaciones:
+            evaluaciones = Evaluacion.objects.filter(asignacion=asignacion)
+
+            resultado.append({
+                "materia": asignacion.materia.nombre,
+                "curso": asignacion.curso.nombre,
+                "gestion": asignacion.gestion.nombre,
+                "evaluaciones": [
+                    {
+                        "nombre": ev.nombre,
+                        "tipo": ev.tipo,
+                        "valor": ev.valor,
+                        "fecha": ev.fecha,
+                        "cerrado": getattr(ev, "cerrado", False)  # si usas este campo
+                    }
+                    for ev in evaluaciones
+                ]
+            })
+
+        return Response(resultado)

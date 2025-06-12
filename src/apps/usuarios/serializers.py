@@ -268,3 +268,21 @@ class RegistrarNotasSerializer(serializers.Serializer):
             evaluacion.save()
 
         return resultados
+    
+    
+class EstudianteSimpleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id', 'nombre', 'ci', 'email', 'celular']
+        
+class NotaEvaluacionSerializer(serializers.Serializer):
+    evaluacion = serializers.CharField()
+    tipo = serializers.CharField()
+    valor = serializers.FloatField()
+    nota = serializers.FloatField()
+
+class MateriaConNotasSerializer(serializers.Serializer):
+    materia = serializers.CharField()
+    curso = serializers.CharField()
+    gestion = serializers.CharField()
+    evaluaciones = NotaEvaluacionSerializer(many=True)
